@@ -1,14 +1,30 @@
 package main
 
 import (
-	"log"
+	"fmt"
+	"regexp"
+	"runtime"
 
 	dnstap "github.com/dnstap/golang-dnstap"
 	"github.com/golang/protobuf/proto"
 	"github.com/miekg/dns"
 )
 
-func handleMsg(m *dns.Msg) {
+var (
+	rrRegex = regexp.MustCompile(`^(.*)\.\t\d+\tIN\tA\t(.*)$`)
+)
+
+type fCb func(string, string)
+type fCbErr func(error)
+
+type dnstapServer struct {
+	cb          fCb
+	cbErr       fCbErr
+	fstrmServer *dnstap.FrameStreamSockInput
+	ch          chan []byte
+}
+
+func (ds *dnstapServer) handleDNSMsg(m *dns.Msg) {
 	for _, a := range m.Answer {
 		if s := rrRegex.FindStringSubmatch(a.String()); len(s) == 3 {
 			zone := s[1]
@@ -22,18 +38,16 @@ func handleMsg(m *dns.Msg) {
 				continue
 			}
 
-			log.Println(zone, ip)
-			bgp.addHost(ip)
-			ipCache.add(ip, zone)
+			ds.cb(ip, zone)
 		}
 	}
 }
 
-func handleProtobuf(in chan []byte) {
-	for frame := range in {
+func (ds *dnstapServer) ProcessProtobuf() {
+	for frame := range ds.ch {
 		tap := &dnstap.Dnstap{}
 		if err := proto.Unmarshal(frame, tap); err != nil {
-			log.Printf("Unmarshal failed: %s", err)
+			ds.cbErr(fmt.Errorf("Unmarshal failed: %s", err))
 			continue
 		}
 
@@ -44,10 +58,31 @@ func handleProtobuf(in chan []byte) {
 
 		dnsMsg := new(dns.Msg)
 		if err := dnsMsg.Unpack(msg.ResponseMessage); err != nil {
-			log.Printf("Unpack failed: %s", err)
+			ds.cbErr(fmt.Errorf("Unpack failed: %s", err))
 			continue
 		}
 
-		handleMsg(dnsMsg)
+		ds.handleDNSMsg(dnsMsg)
 	}
+}
+
+func newDnstapServer(socket string, cb fCb, cbErr fCbErr) (ds *dnstapServer, err error) {
+	ds = &dnstapServer{
+		ch:    make(chan []byte, 1024),
+		cb:    cb,
+		cbErr: cbErr,
+	}
+
+	ds.fstrmServer, err = dnstap.NewFrameStreamSockInputFromPath(socket)
+	if err != nil {
+		return nil, fmt.Errorf("DNSTap listening error: %s", err)
+	}
+
+	for i := 0; i < runtime.NumCPU(); i++ {
+		go ds.ProcessProtobuf()
+	}
+
+	go ds.fstrmServer.ReadInto(ds.ch)
+	//go ds.fstrmServer.Wait()
+	return
 }

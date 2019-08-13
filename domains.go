@@ -96,7 +96,6 @@ func (d *domainTree) loadList(domains []string) (i, s int) {
 	for _, dm := range domains {
 		sdm, _, ok := t.LongestPrefix(dm)
 		if ok && domainLevel(dm) != domainLevel(sdm) {
-			//log.Printf("%s is a subdomain of %s", domainReverse(dm), domainReverse(sdm))
 			s++
 			continue
 		}

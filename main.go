@@ -5,23 +5,22 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"regexp"
 	"syscall"
 	"time"
-
-	dnstap "github.com/dnstap/golang-dnstap"
 )
 
 var (
 	// yandex.ru.  217     IN      A       5.255.255.77
-	rrRegex = regexp.MustCompile(`^(.*)\.\t\d+\tIN\tA\t(.*)$`)
 	dTree   *domainTree
 	bgp     *bgpServer
 	ipCache *cache
 )
 
 func main() {
-	var err error
+	var (
+		err      error
+		shutdown = make(chan struct{})
+	)
 
 	socket := flag.String("s", "", "DNSTap UNIX socket path")
 	domainList := flag.String("d", "", "Domain list (one per line)")
@@ -64,23 +63,28 @@ func main() {
 		log.Fatalf("Unable to init BGP: %s", err)
 	}
 
-	expire := func(c *cacheEntry) {
+	expireCb := func(c *cacheEntry) {
 		log.Printf("%s (%s) expired", c.ip, c.domain)
 		bgp.delHost(c.ip)
 	}
 
-	ipCache = newCache(*ttl, expire)
+	ipCache = newCache(*ttl, expireCb)
 
-	i, err := dnstap.NewFrameStreamSockInputFromPath(*socket)
-	if err != nil {
-		log.Fatalf("FSTRM error: %s", err)
+	addHostCb := func(ip, domain string) {
+		log.Printf("%s: %s", domain, ip)
+		bgp.addHost(ip)
+		ipCache.add(ip, domain)
+	}
+
+	dnsTapErrorCb := func(err error) {
+		log.Println(err)
+	}
+
+	if _, err = newDnstapServer(*socket, addHostCb, dnsTapErrorCb); err != nil {
+		log.Fatalf("Unable to init DNSTap: %s", err)
 	}
 
 	log.Printf("Created DNSTap socket %s", *socket)
-
-	ch := make(chan []byte)
-	go handleProtobuf(ch)
-	go i.ReadInto(ch)
 
 	go func() {
 		sigchannel := make(chan os.Signal, 1)
@@ -96,8 +100,7 @@ func main() {
 				}
 
 			case os.Interrupt, syscall.SIGTERM:
-				bgp.stop()
-				os.Exit(0)
+				close(shutdown)
 
 			case syscall.SIGUSR1:
 				log.Printf("IPs exported: %d, domains loaded: %d", ipCache.count(), dTree.count())
@@ -105,5 +108,6 @@ func main() {
 		}
 	}()
 
-	i.Wait()
+	<-shutdown
+	bgp.stop()
 }
