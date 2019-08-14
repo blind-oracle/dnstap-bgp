@@ -1,0 +1,15 @@
+[Unit]
+Description=DNSTap to BGP exporter
+Documentation=https://github.com/blind-oracle/dnstap-bgp
+After=network.target
+
+[Service]
+Type=simple
+Restart=on-failure
+EnvironmentFile=/etc/default/dnstap-bgp
+ExecStart=/opt/dnstap-bgp -config ${CONFIG}
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target

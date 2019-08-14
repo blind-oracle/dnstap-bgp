@@ -30,6 +30,10 @@ type bgpServer struct {
 }
 
 func newBgp(c *bgpCfg) (b *bgpServer, err error) {
+	if c.AS == 0 {
+		return nil, fmt.Errorf("You need to provide AS")
+	}
+
 	if c.SourceIP != "" && c.SourceIF != "" {
 		return nil, fmt.Errorf("SourceIP and SourceIF are mutually exclusive")
 	}
@@ -109,12 +113,6 @@ func (b *bgpServer) addPeer(addr string) (err error) {
 	})
 }
 
-func (b *bgpServer) stop() error {
-	ctx, cf := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cf()
-	return b.s.StopBgp(ctx, &api.StopBgpRequest{})
-}
-
 func (b *bgpServer) getPath(ip string) *api.Path {
 	nlri, _ := ptypes.MarshalAny(&api.IPAddressPrefix{
 		Prefix:    ip,
@@ -157,4 +155,10 @@ func (b *bgpServer) delHost(ip string) (err error) {
 	return bgp.s.DeletePath(context.Background(), &api.DeletePathRequest{
 		Path: b.getPath(ip),
 	})
+}
+
+func (b *bgpServer) stop() error {
+	ctx, cf := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cf()
+	return b.s.StopBgp(ctx, &api.StopBgpRequest{})
 }
