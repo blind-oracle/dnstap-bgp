@@ -2,8 +2,11 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"regexp"
 	"runtime"
+	"strconv"
 
 	dnstap "github.com/dnstap/golang-dnstap"
 	"github.com/golang/protobuf/proto"
@@ -11,8 +14,14 @@ import (
 )
 
 var (
+	// yandex.ru.  217     IN      A       5.255.255.77
 	rrRegex = regexp.MustCompile(`^(.*)\.\t\d+\tIN\tA\t(.*)$`)
 )
+
+type dnstapCfg struct {
+	Socket string
+	Perm   string
+}
 
 type fCb func(string, string)
 type fCbErr func(error)
@@ -27,18 +36,7 @@ type dnstapServer struct {
 func (ds *dnstapServer) handleDNSMsg(m *dns.Msg) {
 	for _, a := range m.Answer {
 		if s := rrRegex.FindStringSubmatch(a.String()); len(s) == 3 {
-			zone := s[1]
-			ip := s[2]
-
-			if !dTree.has(zone) {
-				continue
-			}
-
-			if ipCache.exists(ip) {
-				continue
-			}
-
-			ds.cb(ip, zone)
+			ds.cb(s[2], s[1])
 		}
 	}
 }
@@ -66,23 +64,34 @@ func (ds *dnstapServer) ProcessProtobuf() {
 	}
 }
 
-func newDnstapServer(socket string, cb fCb, cbErr fCbErr) (ds *dnstapServer, err error) {
+func newDnstapServer(c *dnstapCfg, cb fCb, cbErr fCbErr) (ds *dnstapServer, err error) {
 	ds = &dnstapServer{
 		ch:    make(chan []byte, 1024),
 		cb:    cb,
 		cbErr: cbErr,
 	}
 
-	ds.fstrmServer, err = dnstap.NewFrameStreamSockInputFromPath(socket)
+	if c.Socket == "" {
+		log.Fatal("You need to specify DNSTap socket")
+	}
+
+	ds.fstrmServer, err = dnstap.NewFrameStreamSockInputFromPath(c.Socket)
 	if err != nil {
 		return nil, fmt.Errorf("DNSTap listening error: %s", err)
 	}
 
+	if c.Perm != "" {
+		octal, err := strconv.ParseInt(c.Perm, 8, 32)
+		if err != nil {
+			return nil, fmt.Errorf("Unable to parse '%s' as octal: %s", c.Perm, err)
+		}
+
+		os.Chmod(c.Socket, os.FileMode(octal))
+	}
 	for i := 0; i < runtime.NumCPU(); i++ {
 		go ds.ProcessProtobuf()
 	}
 
 	go ds.fstrmServer.ReadInto(ds.ch)
-	//go ds.fstrmServer.Wait()
 	return
 }

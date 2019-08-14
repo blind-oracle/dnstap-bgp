@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/golang/protobuf/ptypes"
@@ -11,22 +14,40 @@ import (
 	gobgp "github.com/osrg/gobgp/pkg/server"
 )
 
-type bgpServer struct {
-	s   *gobgp.BgpServer
-	rid string
+type bgpCfg struct {
+	AS       uint32
+	RouterID string
+	NextHop  string
+	SourceIP string
+	SourceIF string
+
+	Peers []string
 }
 
-func newBgp(peer string, routerID string, as int) (b *bgpServer, err error) {
+type bgpServer struct {
+	s *gobgp.BgpServer
+	c *bgpCfg
+}
+
+func newBgp(c *bgpCfg) (b *bgpServer, err error) {
+	if c.SourceIP != "" && c.SourceIF != "" {
+		return nil, fmt.Errorf("SourceIP and SourceIF are mutually exclusive")
+	}
+
+	if len(c.Peers) == 0 {
+		return nil, fmt.Errorf("You need to provide at least one peer")
+	}
+
 	b = &bgpServer{
-		s:   gobgp.NewBgpServer(),
-		rid: routerID,
+		s: gobgp.NewBgpServer(),
+		c: c,
 	}
 	go b.s.Serve()
 
 	if err = b.s.StartBgp(context.Background(), &api.StartBgpRequest{
 		Global: &api.Global{
-			As:         uint32(as),
-			RouterId:   routerID,
+			As:         c.AS,
+			RouterId:   c.RouterID,
 			ListenPort: -1,
 		},
 	}); err != nil {
@@ -37,20 +58,55 @@ func newBgp(peer string, routerID string, as int) (b *bgpServer, err error) {
 		return
 	}
 
-	n := &api.Peer{
-		Conf: &api.PeerConf{
-			NeighborAddress: peer,
-			PeerAs:          uint32(as),
-		},
-	}
-
-	if err = b.s.AddPeer(context.Background(), &api.AddPeerRequest{
-		Peer: n,
-	}); err != nil {
-		return
+	for _, p := range c.Peers {
+		if err = b.addPeer(p); err != nil {
+			return
+		}
 	}
 
 	return
+}
+
+func (b *bgpServer) addPeer(addr string) (err error) {
+	port := 179
+	if t := strings.SplitN(addr, ":", 2); len(t) == 2 {
+		addr = t[0]
+
+		if port, err = strconv.Atoi(t[1]); err != nil {
+			return fmt.Errorf("Unable to parse port '%s' as int: %s", t[1], err)
+		}
+	}
+
+	p := &api.Peer{
+		Conf: &api.PeerConf{
+			NeighborAddress: addr,
+			PeerAs:          b.c.AS,
+		},
+
+		Timers: &api.Timers{
+			Config: &api.TimersConfig{
+				ConnectRetry: 10,
+			},
+		},
+
+		Transport: &api.Transport{
+			MtuDiscovery:  true,
+			RemoteAddress: addr,
+			RemotePort:    uint32(port),
+		},
+	}
+
+	if b.c.SourceIP != "" {
+		p.Transport.LocalAddress = b.c.SourceIP
+	}
+
+	if b.c.SourceIF != "" {
+		p.Transport.BindInterface = b.c.SourceIF
+	}
+
+	return b.s.AddPeer(context.Background(), &api.AddPeerRequest{
+		Peer: p,
+	})
 }
 
 func (b *bgpServer) stop() error {
@@ -69,8 +125,17 @@ func (b *bgpServer) getPath(ip string) *api.Path {
 		Origin: 0,
 	})
 
+	var nh string
+	if b.c.NextHop != "" {
+		nh = b.c.NextHop
+	} else if b.c.SourceIP != "" {
+		nh = b.c.SourceIP
+	} else {
+		nh = b.c.RouterID
+	}
+
 	a2, _ := ptypes.MarshalAny(&api.NextHopAttribute{
-		NextHop: b.rid,
+		NextHop: nh,
 	})
 
 	return &api.Path{

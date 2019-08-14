@@ -7,14 +7,26 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/BurntSushi/toml"
+
+	"github.com/vishvananda/netns"
 )
 
 var (
-	// yandex.ru.  217     IN      A       5.255.255.77
 	dTree   *domainTree
 	bgp     *bgpServer
 	ipCache *cache
 )
+
+type cfgRoot struct {
+	Domains   string
+	Namespace string
+	TTL       string
+
+	DNSTap *dnstapCfg
+	BGP    *bgpCfg
+}
 
 func main() {
 	var (
@@ -22,45 +34,29 @@ func main() {
 		shutdown = make(chan struct{})
 	)
 
-	socket := flag.String("s", "", "DNSTap UNIX socket path")
-	domainList := flag.String("d", "", "Domain list (one per line)")
-	peer := flag.String("p", "", "BGP peer")
-	routerID := flag.String("r", "", "BGP router-id")
-	as := flag.Int("a", 0, "BGP AS")
-	ttl := flag.Duration("t", 24*time.Hour, "TTL to announce IPs")
-
+	config := flag.String("config", "", "Path to a config file")
 	flag.Parse()
 
-	if *socket == "" {
-		log.Fatal("You need to specify DNSTap socket")
+	if *config == "" {
+		log.Fatal("You need to specify path to a config file")
 	}
 
-	if *domainList == "" {
-		log.Fatal("You need to specify domain list")
+	cfg := &cfgRoot{}
+	if _, err = toml.DecodeFile(*config, &cfg); err != nil {
+		log.Fatalf("Unable to parse config file '%s': %s", *config, err)
 	}
 
-	if *peer == "" {
-		log.Fatal("You need to specify BGP peer")
+	log.Printf("Configuration: %+v", cfg)
+
+	if cfg.Domains == "" {
+		log.Fatal("You need to specify path to a domain list")
 	}
 
-	if *routerID == "" {
-		log.Fatal("You need to specify BGP router-id")
-	}
-
-	if *as == 0 {
-		log.Fatal("You need to specify BGP AS")
-	}
-
-	dTree = newDomainTree()
-	cnt, skip, err := dTree.loadFile(*domainList)
-	if err != nil {
-		log.Fatalf("Unable to load domain list: %s", err)
-	}
-
-	log.Printf("Domains loaded: %d, skipped: %d", cnt, skip)
-
-	if bgp, err = newBgp(*peer, *routerID, *as); err != nil {
-		log.Fatalf("Unable to init BGP: %s", err)
+	ttl := 24 * time.Hour
+	if cfg.TTL != "" {
+		if ttl, err = time.ParseDuration(cfg.TTL); err != nil {
+			log.Printf("Unable to parse TTL: %s", err)
+		}
 	}
 
 	expireCb := func(c *cacheEntry) {
@@ -68,9 +64,42 @@ func main() {
 		bgp.delHost(c.ip)
 	}
 
-	ipCache = newCache(*ttl, expireCb)
+	ipCache = newCache(ttl, expireCb)
+
+	if cfg.Namespace != "" {
+		nsh, err := netns.GetFromName(cfg.Namespace)
+		if err != nil {
+			log.Fatalf("Unable to find namespace '%s': %s", cfg.Namespace, err)
+		}
+
+		if err = netns.Set(nsh); err != nil {
+			log.Fatalf("Unable to switch to namespace '%s': %s", cfg.Namespace, err)
+		}
+
+		log.Printf("Switched to namespace '%s'", cfg.Namespace)
+	}
+
+	dTree = newDomainTree()
+	cnt, skip, err := dTree.loadFile(cfg.Domains)
+	if err != nil {
+		log.Fatalf("Unable to load domain list: %s", err)
+	}
+
+	log.Printf("Domains loaded: %d, skipped: %d", cnt, skip)
+
+	if bgp, err = newBgp(cfg.BGP); err != nil {
+		log.Fatalf("Unable to init BGP: %s", err)
+	}
 
 	addHostCb := func(ip, domain string) {
+		if !dTree.has(domain) {
+			return
+		}
+
+		if ipCache.exists(ip) {
+			return
+		}
+
 		log.Printf("%s: %s", domain, ip)
 		bgp.addHost(ip)
 		ipCache.add(ip, domain)
@@ -80,11 +109,11 @@ func main() {
 		log.Println(err)
 	}
 
-	if _, err = newDnstapServer(*socket, addHostCb, dnsTapErrorCb); err != nil {
+	if _, err = newDnstapServer(cfg.DNSTap, addHostCb, dnsTapErrorCb); err != nil {
 		log.Fatalf("Unable to init DNSTap: %s", err)
 	}
 
-	log.Printf("Created DNSTap socket %s", *socket)
+	log.Printf("Created DNSTap socket %s", cfg.DNSTap.Socket)
 
 	go func() {
 		sigchannel := make(chan os.Signal, 1)
@@ -93,7 +122,7 @@ func main() {
 		for sig := range sigchannel {
 			switch sig {
 			case syscall.SIGHUP:
-				if i, s, err := dTree.loadFile(*domainList); err != nil {
+				if i, s, err := dTree.loadFile(cfg.Domains); err != nil {
 					log.Printf("Unable to load file: %s", err)
 				} else {
 					log.Printf("Domains loaded: %d, skipped: %d", i, s)

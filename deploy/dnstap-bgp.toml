@@ -1,0 +1,16 @@
+domains = "/opt/rkn_domains.txt"
+ttl = "24h"
+
+[dnstap]
+socket = "/tmp/dnstap.sock"
+perm = "0666"
+
+[bgp]
+as = 65000
+routerid = "192.168.111.1"
+nexthop = "192.168.112.1"
+sourceip = "192.168.113.1"
+
+peers = [
+    "192.168.22.1",
+]
