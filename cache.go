@@ -6,16 +6,16 @@ import (
 )
 
 type cacheEntry struct {
-	ip     string
-	domain string
-	ts     time.Time
+	IP     string
+	Domain string
+	TS     time.Time
 }
 
 type cache struct {
 	m   map[string]*cacheEntry
 	ttl time.Duration
 	cb  func(*cacheEntry)
-	sync.Mutex
+	sync.RWMutex
 }
 
 func (c *cache) cleanup() {
@@ -24,9 +24,12 @@ func (c *cache) cleanup() {
 
 		c.Lock()
 		for k, v := range c.m {
-			if now.Sub(v.ts) >= c.ttl {
+			if now.Sub(v.TS) >= c.ttl {
 				delete(c.m, k)
-				c.cb(v)
+
+				if c.cb != nil {
+					c.cb(v)
+				}
 			}
 		}
 		c.Unlock()
@@ -35,24 +38,30 @@ func (c *cache) cleanup() {
 	}
 }
 
-func (c *cache) exists(ip string) bool {
+func (c *cache) exists(ip string, update bool) bool {
 	c.Lock()
 	e, ok := c.m[ip]
-	if ok {
-		e.ts = time.Now()
+	if ok && update {
+		e.TS = time.Now()
 	}
 	c.Unlock()
 	return ok
 }
 
-func (c *cache) add(ip, domain string) {
+func (c *cache) add(e *cacheEntry) {
 	c.Lock()
-	c.m[ip] = &cacheEntry{
-		ip:     ip,
-		domain: domain,
-		ts:     time.Now(),
-	}
+	c.m[e.IP] = e
 	c.Unlock()
+	return
+}
+
+func (c *cache) getAll() (es []*cacheEntry) {
+	c.RLock()
+	for _, e := range c.m {
+		es = append(es, e)
+	}
+	c.RUnlock()
+	return
 }
 
 func (c *cache) count() int {

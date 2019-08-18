@@ -85,11 +85,11 @@ func (d *domainTree) loadFile(path string) (i, s int, err error) {
 		return
 	}
 
-	i, ss := d.loadList(domains)
-	return i, s + ss, nil
+	i, ss, err := d.loadList(domains)
+	return i, s + ss, err
 }
 
-func (d *domainTree) loadList(domains []string) (i, s int) {
+func (d *domainTree) loadList(domains []string) (i, s int, err error) {
 	sort.Strings(domains)
 	t := radix.New()
 
@@ -102,6 +102,11 @@ func (d *domainTree) loadList(domains []string) (i, s int) {
 
 		t.Insert(dm, true)
 		i++
+	}
+
+	if t.Len() == 0 {
+		err = fmt.Errorf("No domains loaded (%d skipped)", s)
+		return
 	}
 
 	d.Lock()

@@ -13,23 +13,25 @@ import (
 	"github.com/vishvananda/netns"
 )
 
-var (
-	dTree   *domainTree
-	bgp     *bgpServer
-	ipCache *cache
-)
-
 type cfgRoot struct {
 	Domains   string
+	Cache     string
 	Namespace string
 	TTL       string
 
 	DNSTap *dnstapCfg
 	BGP    *bgpCfg
+	Syncer *syncerCfg
 }
 
 func main() {
 	var (
+		dTree   *domainTree
+		bgp     *bgpServer
+		ipCache *cache
+		ipDB    *db
+		syncer  *syncer
+
 		err      error
 		shutdown = make(chan struct{})
 	)
@@ -59,13 +61,6 @@ func main() {
 		}
 	}
 
-	expireCb := func(c *cacheEntry) {
-		log.Printf("%s (%s) expired", c.ip, c.domain)
-		bgp.delHost(c.ip)
-	}
-
-	ipCache = newCache(ttl, expireCb)
-
 	if cfg.Namespace != "" {
 		nsh, err := netns.GetFromName(cfg.Namespace)
 		if err != nil {
@@ -79,6 +74,17 @@ func main() {
 		log.Printf("Switched to namespace '%s'", cfg.Namespace)
 	}
 
+	expireCb := func(e *cacheEntry) {
+		log.Printf("%s (%s) expired", e.IP, e.Domain)
+		bgp.delHost(e.IP)
+
+		if ipDB != nil {
+			ipDB.del(e.IP)
+		}
+	}
+
+	ipCache = newCache(ttl, expireCb)
+
 	dTree = newDomainTree()
 	cnt, skip, err := dTree.loadFile(cfg.Domains)
 	if err != nil {
@@ -87,8 +93,66 @@ func main() {
 
 	log.Printf("Domains loaded: %d, skipped: %d", cnt, skip)
 
+	if cfg.Cache != "" {
+		if ipDB, err = newDB(cfg.Cache); err != nil {
+			log.Fatalf("Unable to init DB '%s': %s", cfg.Cache, err)
+		}
+
+		es, err := ipDB.fetchAll()
+		if err != nil {
+			log.Fatalf("Unable to load entries from DB: %s", err)
+		}
+
+		now := time.Now()
+		i, j, k := 0, 0, 0
+		for _, e := range es {
+			if now.Sub(e.TS) >= ttl {
+				ipDB.del(e.IP)
+				j++
+				continue
+			}
+
+			if !dTree.has(e.Domain) {
+				ipDB.del(e.IP)
+				k++
+				continue
+			}
+
+			ipCache.add(e)
+			i++
+		}
+
+		log.Printf("Loaded from DB: %d, expired: %d, vanished: %d", i, j, k)
+	}
+
 	if bgp, err = newBgp(cfg.BGP); err != nil {
 		log.Fatalf("Unable to init BGP: %s", err)
+	}
+
+	addEntry := func(e *cacheEntry, touch bool) bool {
+		if ipCache.exists(e.IP, touch) {
+			return false
+		}
+
+		log.Printf("%s: %s (from peer: %t)", e.Domain, e.IP, !touch)
+		bgp.addHost(e.IP)
+		ipCache.add(e)
+
+		if ipDB != nil {
+			if err := ipDB.add(e); err != nil {
+				log.Printf("Unable to add (%s, %s) to DB: %s", e.IP, e.Domain, err)
+			}
+		}
+
+		return true
+	}
+
+	syncerCb := func(peer string, new int, err error) {
+		log.Printf("Syncer: Peer %s: synced: %d error: %v", peer, new, err)
+	}
+
+	if syncer, err = newSyncer(cfg.Syncer, ipCache.getAll, addEntry, syncerCb); err != nil {
+		log.Fatalf("Unable to init syncer: %s", err)
 	}
 
 	addHostCb := func(ip, domain string) {
@@ -96,13 +160,16 @@ func main() {
 			return
 		}
 
-		if ipCache.exists(ip) {
-			return
+		e := &cacheEntry{
+			IP:     ip,
+			Domain: domain,
+			TS:     time.Now(),
 		}
 
-		log.Printf("%s: %s", domain, ip)
-		bgp.addHost(ip)
-		ipCache.add(ip, domain)
+		addEntry(e, true)
+		if err := syncer.broadcast(e); err != nil {
+			log.Printf("Unable to broadcast [%s %s]: %s", ip, domain, err)
+		}
 	}
 
 	dnsTapErrorCb := func(err error) {
@@ -137,6 +204,13 @@ func main() {
 		}
 	}()
 
+	addHostCb("1.1.1.1", "007.n4t.co")
+
 	<-shutdown
-	bgp.stop()
+	bgp.close()
+	syncer.close()
+
+	if ipDB != nil {
+		ipDB.close()
+	}
 }

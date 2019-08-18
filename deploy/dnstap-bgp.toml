@@ -1,16 +1,39 @@
-domains = "/opt/rkn_domains.txt"
-ttl = "24h"
+# Path to a list of domains to match
+# Currently IDN domains are not supported
+domains = "/var/cache/rkn_domains.txt"
+
+# Path to a BoltDB file where to persist the cache
+# Optional
+cache = "/var/cache/dnstap-bgp.db"
+
+# TTL of the entries in cache
+# If the entry is not requested by clients for this duration the it's purged from the cache
+ttl = "12h"
 
 [dnstap]
+# Path to a DNSTap socket
 socket = "/tmp/dnstap.sock"
+# Permissions which are set on the socket file
 perm = "0666"
 
 [bgp]
+# BGP AS to announce
 as = 65000
+# BGP router ID
 routerid = "192.168.111.1"
+# BGP nexthop (optional)
 nexthop = "192.168.112.1"
-#sourceip = "192.168.113.1"
+# Source IP to use when establishing BGP peering
+sourceip = "192.168.113.1"
 
+# List of BGP peers
 peers = [
     "192.168.22.1:178",
+]
+
+[syncer]
+listen = "0.0.0.0:8080"
+
+peers = [
+    "127.0.0.1:8081",
 ]

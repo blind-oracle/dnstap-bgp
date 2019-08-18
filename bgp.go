@@ -144,7 +144,7 @@ func (b *bgpServer) getPath(ip string) *api.Path {
 }
 
 func (b *bgpServer) addHost(ip string) (err error) {
-	_, err = bgp.s.AddPath(context.Background(), &api.AddPathRequest{
+	_, err = b.s.AddPath(context.Background(), &api.AddPathRequest{
 		Path: b.getPath(ip),
 	})
 
@@ -152,12 +152,12 @@ func (b *bgpServer) addHost(ip string) (err error) {
 }
 
 func (b *bgpServer) delHost(ip string) (err error) {
-	return bgp.s.DeletePath(context.Background(), &api.DeletePathRequest{
+	return b.s.DeletePath(context.Background(), &api.DeletePathRequest{
 		Path: b.getPath(ip),
 	})
 }
 
-func (b *bgpServer) stop() error {
+func (b *bgpServer) close() error {
 	ctx, cf := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cf()
 	return b.s.StopBgp(ctx, &api.StopBgpRequest{})

@@ -36,7 +36,7 @@ type dnstapServer struct {
 func (ds *dnstapServer) handleDNSMsg(m *dns.Msg) {
 	for _, a := range m.Answer {
 		if s := rrRegex.FindStringSubmatch(a.String()); len(s) == 3 {
-			ds.cb(s[2], s[1])
+			go ds.cb(s[2], s[1])
 		}
 	}
 }
