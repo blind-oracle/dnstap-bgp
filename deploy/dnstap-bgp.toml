@@ -17,23 +17,28 @@ socket = "/tmp/dnstap.sock"
 perm = "0666"
 
 [bgp]
-# BGP AS to announce
+# BGP AS
 as = 65000
 # BGP router ID
-routerid = "192.168.111.1"
+routerID = "192.168.111.1"
+# Source IP to use when establishing BGP peering (optional)
+sourceIP = "192.168.113.1"
 # BGP nexthop (optional)
-nexthop = "192.168.112.1"
-# Source IP to use when establishing BGP peering
-sourceip = "192.168.113.1"
+# If not defined - the SourceIP will be used
+# It it's also not defined - then RouterID
+nextHop = "192.168.112.1"
 
 # List of BGP peers
 peers = [
-    "192.168.22.1:178",
+    "192.168.0.1",
+    "192.168.0.2:177",
 ]
 
 [syncer]
+# Where to listen for sync requests
 listen = "0.0.0.0:8080"
 
+# Sync peers
 peers = [
-    "127.0.0.1:8081",
+    "192.168.0.2:8080",
 ]

@@ -30,14 +30,17 @@ type syncer struct {
 	getAll getAllFunc
 	add    addFunc
 	syncCb syncFunc
+
+	shutdown chan struct{}
 }
 
 func newSyncer(cf *syncerCfg, getAll getAllFunc, add addFunc, syncCb syncFunc) (s *syncer, err error) {
 	s = &syncer{
-		getAll: getAll,
-		add:    add,
-		peers:  cf.Peers,
-		syncCb: syncCb,
+		getAll:   getAll,
+		add:      add,
+		peers:    cf.Peers,
+		syncCb:   syncCb,
+		shutdown: make(chan struct{}),
 	}
 
 	if len(cf.Peers) > 0 {
@@ -45,6 +48,8 @@ func newSyncer(cf *syncerCfg, getAll getAllFunc, add addFunc, syncCb syncFunc) (
 			Timeout: 5 * time.Second,
 		}
 	}
+
+	go s.syncScheduler()
 
 	if cf.Listen == "" {
 		return
@@ -55,8 +60,8 @@ func newSyncer(cf *syncerCfg, getAll getAllFunc, add addFunc, syncCb syncFunc) (
 		Handler: http.DefaultServeMux,
 	}
 
-	http.HandleFunc("/fetch", s.fetch)
-	http.HandleFunc("/put", s.put)
+	http.HandleFunc("/fetch", s.handleFetch)
+	http.HandleFunc("/put", s.handlePut)
 
 	ch := make(chan error)
 	go func() {
@@ -69,15 +74,19 @@ func newSyncer(cf *syncerCfg, getAll getAllFunc, add addFunc, syncCb syncFunc) (
 	case <-time.After(50 * time.Millisecond):
 	}
 
-	go s.syncScheduler()
 	return
 }
 
-func (s *syncer) fetch(wr http.ResponseWriter, r *http.Request) {
+func (s *syncer) handleFetch(wr http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		wr.WriteHeader(400)
+		return
+	}
+
 	json.NewEncoder(wr).Encode(s.getAll())
 }
 
-func (s *syncer) put(wr http.ResponseWriter, r *http.Request) {
+func (s *syncer) handlePut(wr http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	c := &cacheEntry{}
@@ -124,9 +133,15 @@ func (s *syncer) callPeer(p, handler, method string, body io.ReadCloser) (resp *
 }
 
 func (s *syncer) syncScheduler() {
+	t := time.NewTicker(time.Minute)
+
 	for {
-		s.syncAll()
-		time.Sleep(time.Minute)
+		select {
+		case <-t.C:
+			s.syncAll()
+		case <-s.shutdown:
+			return
+		}
 	}
 }
 
@@ -134,7 +149,7 @@ func (s *syncer) syncAll() {
 	for _, p := range s.peers {
 		new := 0
 
-		es, err := s.sync(p)
+		es, err := s.fetchRemote(p)
 		if err != nil {
 			s.syncCb(p, 0, err)
 			continue
@@ -152,7 +167,7 @@ func (s *syncer) syncAll() {
 	return
 }
 
-func (s *syncer) sync(p string) (es []*cacheEntry, err error) {
+func (s *syncer) fetchRemote(p string) (es []*cacheEntry, err error) {
 	resp, err := s.callPeer(p, "fetch", "GET", nil)
 	if err != nil {
 		return
@@ -179,6 +194,7 @@ func (s *syncer) send(e *cacheEntry, p string) (err error) {
 }
 
 func (s *syncer) close() error {
+	close(s.shutdown)
 	c, f := context.WithTimeout(context.Background(), 5*time.Second)
 	defer f()
 	return s.s.Shutdown(c)

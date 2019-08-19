@@ -48,8 +48,6 @@ func main() {
 		log.Fatalf("Unable to parse config file '%s': %s", *config, err)
 	}
 
-	log.Printf("Configuration: %+v", cfg)
-
 	if cfg.Domains == "" {
 		log.Fatal("You need to specify path to a domain list")
 	}
@@ -129,30 +127,41 @@ func main() {
 		log.Fatalf("Unable to init BGP: %s", err)
 	}
 
+	ipDBPut := func(e *cacheEntry) {
+		if ipDB == nil {
+			return
+		}
+
+		if err := ipDB.add(e); err != nil {
+			log.Printf("Unable to add (%s, %s) to DB: %s", e.IP, e.Domain, err)
+		}
+	}
+
 	addEntry := func(e *cacheEntry, touch bool) bool {
 		if ipCache.exists(e.IP, touch) {
+			if touch {
+				ipDBPut(e)
+			}
+
 			return false
 		}
 
 		log.Printf("%s: %s (from peer: %t)", e.Domain, e.IP, !touch)
 		bgp.addHost(e.IP)
 		ipCache.add(e)
-
-		if ipDB != nil {
-			if err := ipDB.add(e); err != nil {
-				log.Printf("Unable to add (%s, %s) to DB: %s", e.IP, e.Domain, err)
-			}
-		}
+		ipDBPut(e)
 
 		return true
 	}
 
-	syncerCb := func(peer string, new int, err error) {
-		log.Printf("Syncer: Peer %s: synced: %d error: %v", peer, new, err)
-	}
+	if cfg.Syncer.Listen != "" || len(cfg.Syncer.Peers) > 0 {
+		syncerCb := func(peer string, new int, err error) {
+			log.Printf("Syncer: Peer %s: synced: %d error: %v", peer, new, err)
+		}
 
-	if syncer, err = newSyncer(cfg.Syncer, ipCache.getAll, addEntry, syncerCb); err != nil {
-		log.Fatalf("Unable to init syncer: %s", err)
+		if syncer, err = newSyncer(cfg.Syncer, ipCache.getAll, addEntry, syncerCb); err != nil {
+			log.Fatalf("Unable to init syncer: %s", err)
+		}
 	}
 
 	addHostCb := func(ip, domain string) {
@@ -167,8 +176,11 @@ func main() {
 		}
 
 		addEntry(e, true)
-		if err := syncer.broadcast(e); err != nil {
-			log.Printf("Unable to broadcast [%s %s]: %s", ip, domain, err)
+
+		if syncer != nil {
+			if err := syncer.broadcast(e); err != nil {
+				log.Printf("Unable to broadcast [%s %s]: %s", ip, domain, err)
+			}
 		}
 	}
 
@@ -204,11 +216,12 @@ func main() {
 		}
 	}()
 
-	addHostCb("1.1.1.1", "007.n4t.co")
-
 	<-shutdown
 	bgp.close()
-	syncer.close()
+
+	if syncer != nil {
+		syncer.close()
+	}
 
 	if ipDB != nil {
 		ipDB.close()
