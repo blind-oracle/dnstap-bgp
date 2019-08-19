@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/gob"
+	"net"
 
 	bolt "github.com/etcd-io/bbolt"
 )
@@ -36,13 +37,13 @@ func (d *db) add(e *cacheEntry) (err error) {
 	}
 
 	return d.h.Update(func(tx *bolt.Tx) error {
-		return tx.Bucket(d.b).Put([]byte(e.IP), b.Bytes())
+		return tx.Bucket(d.b).Put(e.IP, b.Bytes())
 	})
 }
 
-func (d *db) del(ip string) (err error) {
+func (d *db) del(ip net.IP) (err error) {
 	return d.h.Update(func(tx *bolt.Tx) error {
-		return tx.Bucket(d.b).Delete([]byte(ip))
+		return tx.Bucket(d.b).Delete(ip)
 	})
 }
 

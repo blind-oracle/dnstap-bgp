@@ -1,20 +1,23 @@
 package main
 
 import (
+	"net"
 	"sync"
 	"time"
 )
 
 type cacheEntry struct {
-	IP     string
+	IP     net.IP
 	Domain string
 	TS     time.Time
 }
 
+type expireFunc func(*cacheEntry)
+
 type cache struct {
-	m   map[string]*cacheEntry
-	ttl time.Duration
-	cb  func(*cacheEntry)
+	m        map[string]*cacheEntry
+	ttl      time.Duration
+	expireCb expireFunc
 	sync.RWMutex
 }
 
@@ -27,8 +30,8 @@ func (c *cache) cleanup() {
 			if now.Sub(v.TS) >= c.ttl {
 				delete(c.m, k)
 
-				if c.cb != nil {
-					c.cb(v)
+				if c.expireCb != nil {
+					c.expireCb(v)
 				}
 			}
 		}
@@ -38,9 +41,9 @@ func (c *cache) cleanup() {
 	}
 }
 
-func (c *cache) exists(ip string, update bool) bool {
+func (c *cache) exists(ip net.IP, update bool) bool {
 	c.Lock()
-	e, ok := c.m[ip]
+	e, ok := c.m[string(ip)]
 	if ok && update {
 		e.TS = time.Now()
 	}
@@ -50,7 +53,7 @@ func (c *cache) exists(ip string, update bool) bool {
 
 func (c *cache) add(e *cacheEntry) {
 	c.Lock()
-	c.m[e.IP] = e
+	c.m[string(e.IP)] = e
 	c.Unlock()
 	return
 }
@@ -70,11 +73,11 @@ func (c *cache) count() int {
 	return len(c.m)
 }
 
-func newCache(ttl time.Duration, callback func(*cacheEntry)) (c *cache) {
+func newCache(ttl time.Duration, expireCb expireFunc) (c *cache) {
 	c = &cache{
-		m:   map[string]*cacheEntry{},
-		cb:  callback,
-		ttl: ttl,
+		m:        map[string]*cacheEntry{},
+		expireCb: expireCb,
+		ttl:      ttl,
 	}
 
 	go c.cleanup()

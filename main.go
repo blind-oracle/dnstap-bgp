@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -164,7 +165,7 @@ func main() {
 		}
 	}
 
-	addHostCb := func(ip, domain string) {
+	addHostCb := func(ip net.IP, domain string) {
 		if !dTree.has(domain) {
 			return
 		}
@@ -185,7 +186,7 @@ func main() {
 	}
 
 	dnsTapErrorCb := func(err error) {
-		log.Println(err)
+		log.Printf("DNSTap error: %s", err)
 	}
 
 	if _, err = newDnstapServer(cfg.DNSTap, addHostCb, dnsTapErrorCb); err != nil {

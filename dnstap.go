@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
+	"net"
 	"os"
-	"regexp"
 	"runtime"
 	"strconv"
 
@@ -13,17 +13,12 @@ import (
 	"github.com/miekg/dns"
 )
 
-var (
-	// yandex.ru.  217     IN      A       5.255.255.77
-	rrRegex = regexp.MustCompile(`^(.*)\.\t\d+\tIN\tA\t(.*)$`)
-)
-
 type dnstapCfg struct {
 	Socket string
 	Perm   string
 }
 
-type fCb func(string, string)
+type fCb func(net.IP, string)
 type fCbErr func(error)
 
 type dnstapServer struct {
@@ -33,11 +28,45 @@ type dnstapServer struct {
 	ch          chan []byte
 }
 
+func stripDot(d string) string {
+	return d[:len(d)-1]
+}
+
 func (ds *dnstapServer) handleDNSMsg(m *dns.Msg) {
-	for _, a := range m.Answer {
-		if s := rrRegex.FindStringSubmatch(a.String()); len(s) == 3 {
-			go ds.cb(s[2], s[1])
+	var (
+		domain   string
+		cnameTgt string
+	)
+
+loop:
+	for _, rr := range m.Answer {
+		hdr := rr.Header()
+
+		var ip net.IP
+		switch rr.(type) {
+		case *dns.CNAME:
+			cnameTgt = rr.(*dns.CNAME).Target
+			domain = hdr.Name
+			continue loop
+
+		case *dns.A, *dns.AAAA:
+			if cnameTgt == "" {
+				domain = hdr.Name
+			} else if cnameTgt != hdr.Name {
+				continue loop
+			}
+
+			switch r := rr.(type) {
+			case *dns.A:
+				ip = r.A
+			case *dns.AAAA:
+				ip = r.AAAA
+			}
+		default:
+			continue loop
 		}
+
+		ds.cb(ip, stripDot(domain))
 	}
 }
 
@@ -60,7 +89,7 @@ func (ds *dnstapServer) ProcessProtobuf() {
 			continue
 		}
 
-		ds.handleDNSMsg(dnsMsg)
+		go ds.handleDNSMsg(dnsMsg)
 	}
 }
 
@@ -88,6 +117,7 @@ func newDnstapServer(c *dnstapCfg, cb fCb, cbErr fCbErr) (ds *dnstapServer, err 
 
 		os.Chmod(c.Socket, os.FileMode(octal))
 	}
+
 	for i := 0; i < runtime.NumCPU(); i++ {
 		go ds.ProcessProtobuf()
 	}

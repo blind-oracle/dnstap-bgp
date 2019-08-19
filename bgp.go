@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -113,10 +114,15 @@ func (b *bgpServer) addPeer(addr string) (err error) {
 	})
 }
 
-func (b *bgpServer) getPath(ip string) *api.Path {
+func (b *bgpServer) getPath(ip net.IP) *api.Path {
+	var pfxLen uint32 = 32
+	if ip.To4() == nil {
+		pfxLen = 128
+	}
+
 	nlri, _ := ptypes.MarshalAny(&api.IPAddressPrefix{
-		Prefix:    ip,
-		PrefixLen: 32,
+		Prefix:    ip.String(),
+		PrefixLen: pfxLen,
 	})
 
 	a1, _ := ptypes.MarshalAny(&api.OriginAttribute{
@@ -143,7 +149,7 @@ func (b *bgpServer) getPath(ip string) *api.Path {
 	}
 }
 
-func (b *bgpServer) addHost(ip string) (err error) {
+func (b *bgpServer) addHost(ip net.IP) (err error) {
 	_, err = b.s.AddPath(context.Background(), &api.AddPathRequest{
 		Path: b.getPath(ip),
 	})
@@ -151,7 +157,7 @@ func (b *bgpServer) addHost(ip string) (err error) {
 	return
 }
 
-func (b *bgpServer) delHost(ip string) (err error) {
+func (b *bgpServer) delHost(ip net.IP) (err error) {
 	return b.s.DeletePath(context.Background(), &api.DeletePathRequest{
 		Path: b.getPath(ip),
 	})
