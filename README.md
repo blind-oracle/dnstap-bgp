@@ -27,5 +27,24 @@ This daemon was created to solve the problem of manipulating traffic based on do
 * IDN (punycode) domain names are currenly not supported and are silently skipped
 * Sync is fetching the whole cache contents from peers, so if the lists are large (millions of entries) it can be hard on memory and network
 * Performance was not measured very much, but it should be quite scalable - the only single-threaded part is reading from DNSTap socket, but it should be very lightweight
-* The domain list and IP cache are stored in memory for performance reasons
-* Logs only to stdout
+* The domain list and IP cache are stored in memory for performance reasons, so there should be enough RAM
+* Logs only to stdout for now
+
+## Configuration
+See *deploy/dnstap-bgp.toml* for an example configuration and description of parameters.
+
+## Examples
+### unbound.conf
+```
+...
+
+dnstap:
+    dnstap-enable: yes
+    dnstap-socket-path: "/tmp/dnstap.sock"
+    dnstap-send-identity: no
+    dnstap-send-version: no
+
+    dnstap-log-client-response-messages: yes
+```
+
+**Important** In Ubuntu access to the DNSTap socket for Unbound is blocked by default by AppArmor rules. Either disable it for the Unbound binary or fix the rules.

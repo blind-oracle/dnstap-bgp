@@ -8,21 +8,25 @@ cache = "/var/cache/dnstap-bgp.db"
 
 # TTL of the entries in cache
 # If the entry is not requested by clients for this duration the it's purged from the cache
-ttl = "12h"
+ttl = "24h"
 
 [dnstap]
 # Path to a DNSTap socket
 socket = "/tmp/dnstap.sock"
+
 # Permissions which are set on the socket file
 perm = "0666"
 
 [bgp]
 # BGP AS
 as = 65000
+
 # BGP router ID
 routerID = "192.168.111.1"
+
 # Source IP to use when establishing BGP peering (optional)
 sourceIP = "192.168.113.1"
+
 # BGP nexthop (optional)
 # If not defined - the SourceIP will be used
 # It it's also not defined - then RouterID

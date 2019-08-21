@@ -21,24 +21,26 @@ type cache struct {
 	sync.RWMutex
 }
 
-func (c *cache) cleanup() {
+func (c *cache) cleanupScheduler() {
 	for {
-		now := time.Now()
-
-		c.Lock()
-		for k, v := range c.m {
-			if now.Sub(v.TS) >= c.ttl {
-				delete(c.m, k)
-
-				if c.expireCb != nil {
-					c.expireCb(v)
-				}
-			}
-		}
-		c.Unlock()
-
+		c.cleanup()
 		time.Sleep(time.Minute)
 	}
+}
+
+func (c *cache) cleanup() {
+	now := time.Now()
+	c.Lock()
+	for k, v := range c.m {
+		if now.Sub(v.TS) >= c.ttl {
+			delete(c.m, k)
+
+			if c.expireCb != nil {
+				c.expireCb(v)
+			}
+		}
+	}
+	c.Unlock()
 }
 
 func (c *cache) exists(ip net.IP, update bool) bool {
@@ -80,6 +82,6 @@ func newCache(ttl time.Duration, expireCb expireFunc) (c *cache) {
 		ttl:      ttl,
 	}
 
-	go c.cleanup()
+	go c.cleanupScheduler()
 	return
 }

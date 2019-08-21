@@ -1,6 +1,8 @@
 package main
 
 import (
+	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,6 +29,17 @@ func Test_domainTree(t *testing.T) {
 	dt.loadList(l)
 	assert.True(t, dt.has("api.facebook.com"))
 	assert.False(t, dt.has("facebookk.com"))
+
+	testlist := "__test.txt"
+	err := ioutil.WriteFile(testlist, []byte("foo.bar\n123123----foo\n"), 0666)
+	assert.Nil(t, err)
+
+	i, s, err := dt.loadFile(testlist)
+	assert.Nil(t, err)
+	assert.Equal(t, 1, i)
+	assert.Equal(t, 1, s)
+
+	os.Remove(testlist)
 }
 
 func Test_domainLevel(t *testing.T) {
