@@ -14,7 +14,7 @@ import (
 )
 
 type dnstapCfg struct {
-	Socket string
+	Listen string
 	Perm   string
 }
 
@@ -25,6 +25,8 @@ type dnstapServer struct {
 	cb          fCb
 	cbErr       fCbErr
 	fstrmServer *dnstap.FrameStreamSockInput
+	l           net.Listener
+	unixSocket  bool
 	ch          chan []byte
 }
 
@@ -101,22 +103,30 @@ func newDnstapServer(c *dnstapCfg, cb fCb, cbErr fCbErr) (ds *dnstapServer, err 
 		cbErr: cbErr,
 	}
 
-	if c.Socket == "" {
-		log.Fatal("You need to specify DNSTap socket")
+	if c.Listen == "" {
+		return nil, fmt.Errorf("You need to specify DNSTap listening poing")
 	}
 
-	ds.fstrmServer, err = dnstap.NewFrameStreamSockInputFromPath(c.Socket)
-	if err != nil {
-		return nil, fmt.Errorf("DNSTap listening error: %s", err)
-	}
-
-	if c.Perm != "" {
-		octal, err := strconv.ParseInt(c.Perm, 8, 32)
-		if err != nil {
-			return nil, fmt.Errorf("Unable to parse '%s' as octal: %s", c.Perm, err)
+	if addr, err := net.ResolveTCPAddr("tcp", c.Listen); err == nil {
+		if ds.l, err = net.ListenTCP("tcp", addr); err != nil {
+			return nil, fmt.Errorf("Unable to listen on '%s': %s", c.Listen, err)
 		}
 
-		os.Chmod(c.Socket, os.FileMode(octal))
+		ds.fstrmServer = dnstap.NewFrameStreamSockInput(ds.l)
+	} else {
+		ds.fstrmServer, err = dnstap.NewFrameStreamSockInputFromPath(c.Listen)
+		if err != nil {
+			return nil, fmt.Errorf("Unable to listen on '%s': %s", c.Listen, err)
+		}
+
+		if c.Perm != "" {
+			octal, err := strconv.ParseInt(c.Perm, 8, 32)
+			if err != nil {
+				return nil, fmt.Errorf("Unable to parse '%s' as octal: %s", c.Perm, err)
+			}
+
+			os.Chmod(c.Listen, os.FileMode(octal))
+		}
 	}
 
 	for i := 0; i < runtime.NumCPU(); i++ {

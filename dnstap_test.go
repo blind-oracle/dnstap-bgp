@@ -30,7 +30,7 @@ func Test_DNSTap(t *testing.T) {
 	}
 
 	_, err := newDnstapServer(&dnstapCfg{
-		Socket: "dnstap.sock",
+		Listen: "dnstap.sock",
 		Perm:   "666",
 	}, cb, cbe)
 	assert.Nil(t, err)

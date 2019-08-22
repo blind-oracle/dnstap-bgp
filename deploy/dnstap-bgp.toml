@@ -1,20 +1,24 @@
-# Path to a list of domains to match
+# Path to a list of domains to match - one domain per line
+# If a higher-level domain exists in the list - its subdomains will not be loaded, but still matched
 # Currently IDN domains are not supported
-domains = "/var/cache/rkn_domains.txt"
+domains = "/var/cache/domains.txt"
 
 # Path to a BoltDB file where to persist the cache
 # Optional
 cache = "/var/cache/dnstap-bgp.db"
 
 # TTL of the entries in cache
-# If the entry is not requested by clients for this duration the it's purged from the cache
+# If the entry is not requested by clients for this period then it's purged from the cache
+# Optional, default 24h
 ttl = "24h"
 
 [dnstap]
-# Path to a DNSTap socket
-socket = "/tmp/dnstap.sock"
+# IP:Port or a path to a UNIX socket file to listen on
+# listen = "0.0.0.0:1234"
+listen = "/tmp/dnstap.sock"
 
-# Permissions which are set on the socket file
+# Permissions which are set on the socket file if listening on UNIX socket
+# Optional, has no effect if using TCP
 perm = "0666"
 
 [bgp]
@@ -32,17 +36,24 @@ sourceIP = "192.168.113.1"
 # It it's also not defined - then RouterID
 nextHop = "192.168.112.1"
 
-# List of BGP peers
+# List of BGP peers in hostname or hostname:port formats
 peers = [
     "192.168.0.1",
     "192.168.0.2:177",
 ]
 
 [syncer]
-# Where to listen for sync requests
+# Where to listen for the sync requests
+# Optional, if not set - no incoming syncs will be allowed
 listen = "0.0.0.0:8080"
 
-# Sync peers
+# How frequently to perform full sync with peers
+# Optional, default 10m
+# If set to zero - no periodic syncs performed
+syncInterval = "10m"
+
+# Peers to sync with in hostname:port format
+# Optional, if not specified - no sync or push performed
 peers = [
     "192.168.0.2:8080",
 ]

@@ -193,7 +193,7 @@ func main() {
 		log.Fatalf("Unable to init DNSTap: %s", err)
 	}
 
-	log.Printf("Created DNSTap socket %s", cfg.DNSTap.Socket)
+	log.Printf("Listening for DNSTap on: %s", cfg.DNSTap.Listen)
 
 	go func() {
 		sigchannel := make(chan os.Signal, 1)

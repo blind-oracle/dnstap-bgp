@@ -11,7 +11,7 @@ This daemon was created to solve the problem of manipulating traffic based on do
 * Client sends DNS request to a recursive DNS server which supports DNSTap (**unbound**, **bind** etc)
 * DNS server logs the reply information through DNSTap to **dnstap-bgp**
 * **dnstap-bgp** caches the IPs from the reply and announces them through BGP
-* When the request for the already cached IP comes again - refresh it's TTL
+* When the request for the already cached IP comes again - refresh its TTL
 
 ## Features
 * Load a list of domains to intercept: the prefix tree is used to match subdomains
@@ -21,11 +21,11 @@ This daemon was created to solve the problem of manipulating traffic based on do
 * Export routes to any number of BGP peers
 * Configurable timeout to purge entries from the cache
 * Persist the cache on disk (in a Bolt database)
-* Sync the obtained IPs with other instances of **dnstap-bgp** using simple HTTP requests
+* Sync the obtained IPs with other instances of **dnstap-bgp**
 * Can switch itself to a pre-created network namespace before initializing network. This can be useful if you want to peer with a BGP server running on the same host (e.g. **bird** does not support peering with any of the local interfaces). This requires running as *root*.
 
 ## Synchronization
-**dnstap-bgp** can optionally push the obtained IPs to other **dnstap-bgp** instances. Also it periodically syncs its cache with peers to keep it up-to-date in case of network outages. The interaction is done using simple HTTP queries and JSON.
+**dnstap-bgp** can optionally push the obtained IPs to other **dnstap-bgp** instances. It also periodically syncs its cache with peers to keep it up-to-date in case of network outages. The interaction is done using simple HTTP queries and JSON.
 
 ## Limitations
 * IDN (punycode) domain names are currenly not supported and are silently skipped
@@ -38,17 +38,28 @@ This daemon was created to solve the problem of manipulating traffic based on do
 See *deploy/dnstap-bgp.toml* for an example configuration and description of parameters.
 
 ## Examples
-### unbound.conf
-```
-...
+DNSTap works in a client-server manner, where DNS server is *the client** and **dnstap-bgp** is a server.
 
+### Unbound
+Unbound seem to be able to work with DNSTap only through UNIX sockets.
+
+```
 dnstap:
     dnstap-enable: yes
     dnstap-socket-path: "/tmp/dnstap.sock"
-    dnstap-send-identity: no
-    dnstap-send-version: no
-
     dnstap-log-client-response-messages: yes
 ```
 
 **Important** In Ubuntu access to the DNSTap socket for Unbound is blocked by default by AppArmor rules. Either disable it for the Unbound binary or fix the rules.
+
+### BIND
+DNSTap is supported since 9.11, but usually is not built-in, at least in Ubuntu packages.
+BIND also can connect only using UNIX socket.
+
+```
+dnstap {
+    client response;
+};
+
+dnstap-output unix "/tmp/dnstap.sock"
+```

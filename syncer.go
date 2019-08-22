@@ -13,8 +13,9 @@ import (
 )
 
 type syncerCfg struct {
-	Listen string
-	Peers  []string
+	Listen       string
+	SyncInterval string
+	Peers        []string
 }
 
 type getAllFunc func() []*cacheEntry
@@ -25,7 +26,8 @@ type syncer struct {
 	s *http.Server
 	c *http.Client
 
-	peers []string
+	syncInterval time.Duration
+	peers        []string
 
 	getAll getAllFunc
 	add    addFunc
@@ -36,11 +38,18 @@ type syncer struct {
 
 func newSyncer(cf *syncerCfg, getAll getAllFunc, add addFunc, syncCb syncFunc) (s *syncer, err error) {
 	s = &syncer{
-		getAll:   getAll,
-		add:      add,
-		peers:    cf.Peers,
-		syncCb:   syncCb,
-		shutdown: make(chan struct{}),
+		getAll:       getAll,
+		add:          add,
+		peers:        cf.Peers,
+		syncCb:       syncCb,
+		shutdown:     make(chan struct{}),
+		syncInterval: 10 * time.Minute,
+	}
+
+	if cf.SyncInterval != "" {
+		if s.syncInterval, err = time.ParseDuration(cf.SyncInterval); err != nil {
+			return nil, fmt.Errorf("Unable to parse syncInterval: %s", err)
+		}
 	}
 
 	if len(cf.Peers) > 0 {
@@ -49,7 +58,9 @@ func newSyncer(cf *syncerCfg, getAll getAllFunc, add addFunc, syncCb syncFunc) (
 		}
 	}
 
-	go s.syncScheduler()
+	if s.syncInterval > 0 {
+		go s.syncScheduler()
+	}
 
 	if cf.Listen == "" {
 		return
@@ -133,12 +144,13 @@ func (s *syncer) callPeer(p, handler, method string, body io.ReadCloser) (resp *
 }
 
 func (s *syncer) syncScheduler() {
-	t := time.NewTicker(time.Minute)
+	t := time.NewTicker(s.syncInterval)
 
 	for {
 		select {
 		case <-t.C:
 			s.syncAll()
+
 		case <-s.shutdown:
 			return
 		}
