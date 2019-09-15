@@ -25,6 +25,10 @@ type cfgRoot struct {
 	Syncer *syncerCfg
 }
 
+var (
+	version string
+)
+
 func main() {
 	var (
 		dTree   *domainTree
@@ -36,6 +40,8 @@ func main() {
 		err      error
 		shutdown = make(chan struct{})
 	)
+
+	log.Printf("dnstap-bgp v%s", version)
 
 	config := flag.String("config", "", "Path to a config file")
 	flag.Parse()

@@ -34,11 +34,21 @@ This daemon was created to solve the problem of manipulating traffic based on do
 * The domain list and IP cache are stored in memory for performance reasons, so there should be enough RAM
 * Logs only to stdout for now
 
-## Configuration
-See *deploy/dnstap-bgp.toml* for an example configuration and description of parameters.
+## Installation
+### From packages
+Get *deb* or *rpm* packages from the releases page.
 
-## Examples
-DNSTap works in a client-server manner, where DNS server is *the client** and **dnstap-bgp** is a server.
+### From source
+You'll need Go environment set up and *dep* installed, then just run `make`
+
+### Building packages
+To build a package you'll need *fpm* tool installed, then just run `make rpm` or `make deb`
+
+## Configuration
+See *deploy/dnstap-bgp.conf* for an example configuration and description of parameters.
+
+## DNS server examples
+DNSTap protocol works in a client-server manner, where DNS server is the client and **dnstap-bgp** is a server.
 
 ### Unbound
 Unbound seem to be able to work with DNSTap only through UNIX sockets.

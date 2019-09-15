@@ -2,3 +2,5 @@ dnstap-bgp
 !deploy/dnstap-bgp
 test*
 vendor*
+*.deb
+*.rpm

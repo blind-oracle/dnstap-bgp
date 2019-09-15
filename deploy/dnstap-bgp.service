@@ -7,7 +7,7 @@ After=network.target
 Type=simple
 Restart=on-failure
 EnvironmentFile=/etc/default/dnstap-bgp
-ExecStart=/opt/dnstap-bgp -config ${CONFIG}
+ExecStart=/usr/bin/dnstap-bgp -config ${CONFIG}
 ExecReload=/bin/kill -HUP $MAINPID
 KillMode=control-group
 
