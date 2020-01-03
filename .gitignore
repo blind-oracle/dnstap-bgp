@@ -4,3 +4,4 @@ test*
 vendor*
 *.deb
 *.rpm
+.out

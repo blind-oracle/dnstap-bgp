@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"net"
 	"time"
 )
 
@@ -66,24 +68,26 @@ func newSyncer(cf *syncerCfg, getAll getAllFunc, add addFunc, syncCb syncFunc) (
 		return
 	}
 
-	s.s = &http.Server{
-		Addr:    cf.Listen,
-		Handler: http.DefaultServeMux,
+	addr, err := net.ResolveTCPAddr("tcp", cf.Listen)
+	if err != nil {
+		return
 	}
+
+	l, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		return
+	}
+
+	s.s = &http.Server{}
 
 	http.HandleFunc("/fetch", s.handleFetch)
 	http.HandleFunc("/put", s.handlePut)
 
-	ch := make(chan error)
 	go func() {
-		ch <- s.s.ListenAndServe()
+		if err := s.s.Serve(l); err != nil {
+			log.Fatal(err)
+		}
 	}()
-
-	select {
-	case err = <-ch:
-		return nil, err
-	case <-time.After(50 * time.Millisecond):
-	}
 
 	return
 }
