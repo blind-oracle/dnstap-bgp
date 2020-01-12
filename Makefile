@@ -13,7 +13,6 @@ ARCH := amd64
 all: build
 
 build:
-	$(DEP) ensure
 	rm -rf $(OUT)
 	mkdir -p $(OUT)
 	go build -ldflags "-s -w -X main.version=$(VERSION)"

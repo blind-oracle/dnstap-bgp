@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"runtime"
@@ -68,7 +67,6 @@ loop:
 			continue loop
 		}
 
-		log.Println(ip)
 		ds.cb(ip, stripDot(domain))
 	}
 }

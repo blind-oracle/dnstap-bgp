@@ -10,14 +10,11 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-
-	"github.com/vishvananda/netns"
 )
 
 type cfgRoot struct {
 	Domains   string
 	Cache     string
-	Namespace string
 	TTL       string
 
 	DNSTap *dnstapCfg
@@ -31,9 +28,7 @@ var (
 
 func main() {
 	var (
-		dTree   *domainTree
 		bgp     *bgpServer
-		ipCache *cache
 		ipDB    *db
 		syncer  *syncer
 
@@ -66,19 +61,6 @@ func main() {
 		}
 	}
 
-	if cfg.Namespace != "" {
-		nsh, err := netns.GetFromName(cfg.Namespace)
-		if err != nil {
-			log.Fatalf("Unable to find namespace '%s': %s", cfg.Namespace, err)
-		}
-
-		if err = netns.Set(nsh); err != nil {
-			log.Fatalf("Unable to switch to namespace '%s': %s", cfg.Namespace, err)
-		}
-
-		log.Printf("Switched to namespace '%s'", cfg.Namespace)
-	}
-
 	expireCb := func(e *cacheEntry) {
 		log.Printf("%s (%s) expired", e.IP, e.Domain)
 		bgp.delHost(e.IP)
@@ -88,9 +70,9 @@ func main() {
 		}
 	}
 
-	ipCache = newCache(ttl, expireCb)
-
-	dTree = newDomainTree()
+	ipCache := newCache(ttl, expireCb)
+	dTree := newDomainTree()
+	
 	cnt, skip, err := dTree.loadFile(cfg.Domains)
 	if err != nil {
 		log.Fatalf("Unable to load domain list: %s", err)

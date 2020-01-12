@@ -177,6 +177,8 @@ func (s *syncer) syncAll() {
 			}
 		}
 
+		log.Printf("Syncer: got %d (%d new) entries from peer %s", len(es), new, p)
+
 		s.syncCb(p, new, nil)
 	}
 
