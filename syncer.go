@@ -5,12 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"io"
 	"io/ioutil"
+	"log"
+	"net"
 	"net/http"
 	"net/url"
-	"net"
 	"time"
 )
 
@@ -84,7 +84,7 @@ func newSyncer(cf *syncerCfg, getAll getAllFunc, add addFunc, syncCb syncFunc) (
 	http.HandleFunc("/put", s.handlePut)
 
 	go func() {
-		if err := s.s.Serve(l); err != nil {
+		if err := s.s.Serve(l); err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}
 	}()
@@ -213,7 +213,9 @@ func (s *syncer) send(e *cacheEntry, p string) (err error) {
 
 func (s *syncer) close() error {
 	close(s.shutdown)
+
 	c, f := context.WithTimeout(context.Background(), 5*time.Second)
 	defer f()
+
 	return s.s.Shutdown(c)
 }
