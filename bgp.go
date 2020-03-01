@@ -23,6 +23,7 @@ type bgpCfg struct {
 	SourceIF string
 
 	Peers []string
+	IPv6  bool
 }
 
 type bgpServer struct {
@@ -74,6 +75,7 @@ func newBgp(c *bgpCfg) (b *bgpServer, err error) {
 
 func (b *bgpServer) addPeer(addr string) (err error) {
 	port := 179
+
 	if t := strings.SplitN(addr, ":", 2); len(t) == 2 {
 		addr = t[0]
 
@@ -117,6 +119,10 @@ func (b *bgpServer) addPeer(addr string) (err error) {
 func (b *bgpServer) getPath(ip net.IP) *api.Path {
 	var pfxLen uint32 = 32
 	if ip.To4() == nil {
+		if !b.c.IPv6 {
+			return nil
+		}
+
 		pfxLen = 128
 	}
 
@@ -143,23 +149,36 @@ func (b *bgpServer) getPath(ip net.IP) *api.Path {
 	})
 
 	return &api.Path{
-		Family: &api.Family{Afi: api.Family_AFI_IP, Safi: api.Family_SAFI_UNICAST},
+		Family: &api.Family{
+			Afi:  api.Family_AFI_IP,
+			Safi: api.Family_SAFI_UNICAST,
+		},
 		Nlri:   nlri,
 		Pattrs: []*any.Any{a1, a2},
 	}
 }
 
 func (b *bgpServer) addHost(ip net.IP) (err error) {
+	p := b.getPath(ip)
+	if p == nil {
+		return
+	}
+
 	_, err = b.s.AddPath(context.Background(), &api.AddPathRequest{
-		Path: b.getPath(ip),
+		Path: p,
 	})
 
 	return
 }
 
 func (b *bgpServer) delHost(ip net.IP) (err error) {
+	p := b.getPath(ip)
+	if p == nil {
+		return
+	}
+
 	return b.s.DeletePath(context.Background(), &api.DeletePathRequest{
-		Path: b.getPath(ip),
+		Path: p,
 	})
 }
 

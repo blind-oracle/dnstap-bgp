@@ -13,9 +13,10 @@ import (
 )
 
 type cfgRoot struct {
-	Domains   string
-	Cache     string
-	TTL       string
+	Domains string
+	Cache   string
+	TTL     string
+	IPv6    bool
 
 	DNSTap *dnstapCfg
 	BGP    *bgpCfg
@@ -28,9 +29,9 @@ var (
 
 func main() {
 	var (
-		bgp     *bgpServer
-		ipDB    *db
-		syncer  *syncer
+		bgp    *bgpServer
+		ipDB   *db
+		syncer *syncer
 
 		err      error
 		shutdown = make(chan struct{})
@@ -49,6 +50,9 @@ func main() {
 	if _, err = toml.DecodeFile(*config, &cfg); err != nil {
 		log.Fatalf("Unable to parse config file '%s': %s", *config, err)
 	}
+
+	cfg.DNSTap.IPv6 = cfg.IPv6
+	cfg.BGP.IPv6 = cfg.IPv6
 
 	if cfg.Domains == "" {
 		log.Fatal("You need to specify path to a domain list")
@@ -72,7 +76,7 @@ func main() {
 
 	ipCache := newCache(ttl, expireCb)
 	dTree := newDomainTree()
-	
+
 	cnt, skip, err := dTree.loadFile(cfg.Domains)
 	if err != nil {
 		log.Fatalf("Unable to load domain list: %s", err)

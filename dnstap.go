@@ -15,12 +15,14 @@ import (
 type dnstapCfg struct {
 	Listen string
 	Perm   string
+	IPv6   bool
 }
 
 type fCb func(net.IP, string)
 type fCbErr func(error)
 
 type dnstapServer struct {
+	cfg         *dnstapCfg
 	cb          fCb
 	cbErr       fCbErr
 	fstrmServer *dnstap.FrameStreamSockInput
@@ -61,8 +63,13 @@ loop:
 			case *dns.A:
 				ip = r.A
 			case *dns.AAAA:
+				if !ds.cfg.IPv6 {
+					continue loop
+				}
+
 				ip = r.AAAA
 			}
+
 		default:
 			continue loop
 		}
@@ -96,6 +103,7 @@ func (ds *dnstapServer) ProcessProtobuf() {
 
 func newDnstapServer(c *dnstapCfg, cb fCb, cbErr fCbErr) (ds *dnstapServer, err error) {
 	ds = &dnstapServer{
+		cfg:   c,
 		ch:    make(chan []byte, 1024),
 		cb:    cb,
 		cbErr: cbErr,
