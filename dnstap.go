@@ -37,11 +37,15 @@ func stripDot(d string) string {
 
 func (ds *dnstapServer) handleDNSMsg(m *dns.Msg) {
 	var (
-		domain   string
-		cnameTgt string
+		domain      string
+		cnameTgt    string
+		origCname   string
+		multiCnames bool
 	)
+	multiCnames = false
 
 loop:
+
 	for _, rr := range m.Answer {
 		hdr := rr.Header()
 
@@ -50,6 +54,11 @@ loop:
 		case *dns.CNAME:
 			cnameTgt = rr.(*dns.CNAME).Target
 			domain = hdr.Name
+			if origCname == "" {
+				origCname = domain
+			} else {
+				multiCnames = true
+			}
 			continue loop
 
 		case *dns.A, *dns.AAAA:
@@ -66,14 +75,15 @@ loop:
 				if !ds.cfg.IPv6 {
 					continue loop
 				}
-
 				ip = r.AAAA
 			}
 
 		default:
 			continue loop
 		}
-
+		if multiCnames == true {
+			domain = origCname
+		}
 		ds.cb(ip, stripDot(domain))
 	}
 }
