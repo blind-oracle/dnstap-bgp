@@ -84,6 +84,10 @@ func main() {
 
 	log.Printf("Domains loaded: %d, skipped: %d", cnt, skip)
 
+	if bgp, err = newBgp(cfg.BGP); err != nil {
+		log.Fatalf("Unable to init BGP: %s", err)
+	}
+
 	if cfg.Cache != "" {
 		if ipDB, err = newDB(cfg.Cache); err != nil {
 			log.Fatalf("Unable to init DB '%s': %s", cfg.Cache, err)
@@ -110,14 +114,11 @@ func main() {
 			}
 
 			ipCache.add(e)
+			bgp.addHost(e.IP)
 			i++
 		}
 
 		log.Printf("Loaded from DB: %d, expired: %d, vanished: %d", i, j, k)
-	}
-
-	if bgp, err = newBgp(cfg.BGP); err != nil {
-		log.Fatalf("Unable to init BGP: %s", err)
 	}
 
 	ipDBPut := func(e *cacheEntry) {
