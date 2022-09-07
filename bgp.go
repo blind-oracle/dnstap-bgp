@@ -19,6 +19,7 @@ type bgpCfg struct {
 	AS       uint32
 	RouterID string
 	NextHop  string
+	NextHopIPv6 string
 	SourceIP string
 	SourceIF string
 
@@ -90,6 +91,27 @@ func (b *bgpServer) addPeer(addr string) (err error) {
 			PeerAs:          b.c.AS,
 		},
 
+		AfiSafis: []*api.AfiSafi{
+			{
+				Config: &api.AfiSafiConfig{
+					Family: &api.Family{
+						Afi:  api.Family_AFI_IP,
+						Safi: api.Family_SAFI_UNICAST,
+					},
+					Enabled: true,
+				},
+			},
+			{
+				Config: &api.AfiSafiConfig{
+					Family: &api.Family{
+						Afi:  api.Family_AFI_IP6,
+						Safi: api.Family_SAFI_UNICAST,
+					},
+					Enabled: true,
+				},
+			},
+		},
+
 		Timers: &api.Timers{
 			Config: &api.TimersConfig{
 				ConnectRetry: 10,
@@ -117,12 +139,13 @@ func (b *bgpServer) addPeer(addr string) (err error) {
 }
 
 func (b *bgpServer) getPath(ip net.IP) *api.Path {
+
+	var nh string
 	var pfxLen uint32 = 32
 	if ip.To4() == nil {
 		if !b.c.IPv6 {
 			return nil
 		}
-
 		pfxLen = 128
 	}
 
@@ -135,26 +158,52 @@ func (b *bgpServer) getPath(ip net.IP) *api.Path {
 		Origin: 0,
 	})
 
-	var nh string
-	if b.c.NextHop != "" {
-		nh = b.c.NextHop
-	} else if b.c.SourceIP != "" {
-		nh = b.c.SourceIP
-	} else {
-		nh = b.c.RouterID
-	}
+	if ip.To4() == nil {
 
-	a2, _ := ptypes.MarshalAny(&api.NextHopAttribute{
-		NextHop: nh,
-	})
-
-	return &api.Path{
-		Family: &api.Family{
-			Afi:  api.Family_AFI_IP,
+		v6Family := &api.Family{
+			Afi:  api.Family_AFI_IP6,
 			Safi: api.Family_SAFI_UNICAST,
-		},
-		Nlri:   nlri,
-		Pattrs: []*any.Any{a1, a2},
+		}
+
+		if b.c.NextHopIPv6 != "" {
+		  nh = b.c.NextHopIPv6
+		} else {
+		  nh = "fd00::1"
+		}
+
+		v6Attrs, _ := ptypes.MarshalAny(&api.MpReachNLRIAttribute{
+			Family:		v6Family,
+			NextHops:	[]string{nh},
+			Nlris:		[]*any.Any{nlri},
+		})
+
+		return &api.Path{
+			Family: v6Family,
+			Nlri:   nlri,
+			Pattrs: []*any.Any{a1, v6Attrs},
+		}
+	} else {
+
+		if b.c.NextHop != "" {
+			nh = b.c.NextHop
+		} else if b.c.SourceIP != "" {
+			nh = b.c.SourceIP
+		} else {
+			nh = b.c.RouterID
+		}
+
+		a2, _ := ptypes.MarshalAny(&api.NextHopAttribute{
+			NextHop: nh,
+		})
+
+		return &api.Path{
+	  	Family: &api.Family{
+	  		Afi:  api.Family_AFI_IP,
+	  		Safi: api.Family_SAFI_UNICAST,
+			},
+			Nlri:   nlri,
+			Pattrs: []*any.Any{a1, a2},
+		}
 	}
 }
 
