@@ -22,12 +22,10 @@ func newDB(path string) (d *db, err error) {
 		return
 	}
 
-	err = d.h.Update(func(tx *bolt.Tx) error {
+	return d, d.h.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists(d.b)
 		return err
 	})
-
-	return
 }
 
 func (d *db) add(e *cacheEntry) (err error) {
@@ -52,7 +50,7 @@ func (d *db) fetchAll() (es []*cacheEntry, err error) {
 		return tx.Bucket(d.b).ForEach(func(k, v []byte) (err error) {
 			e := &cacheEntry{}
 			if err = gob.NewDecoder(bytes.NewBuffer(v)).Decode(e); err != nil {
-				return
+				return err
 			}
 
 			es = append(es, e)
@@ -60,7 +58,7 @@ func (d *db) fetchAll() (es []*cacheEntry, err error) {
 		})
 	})
 
-	return
+	return es, err
 }
 
 func (d *db) close() error {

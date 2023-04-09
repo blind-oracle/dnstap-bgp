@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
 	api "github.com/osrg/gobgp/v3/api"
 	gobgp "github.com/osrg/gobgp/v3/pkg/server"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 type bgpCfg struct {
@@ -125,7 +125,6 @@ func (b *bgpServer) addPeer(addr string) (err error) {
 }
 
 func (b *bgpServer) getPath(ip net.IP) *api.Path {
-
 	var nh string
 	var pfxLen uint32 = 32
 	if ip.To4() == nil {
@@ -135,12 +134,12 @@ func (b *bgpServer) getPath(ip net.IP) *api.Path {
 		pfxLen = 128
 	}
 
-	nlri, _ := ptypes.MarshalAny(&api.IPAddressPrefix{
+	nlri, _ := anypb.New(&api.IPAddressPrefix{
 		Prefix:    ip.String(),
 		PrefixLen: pfxLen,
 	})
 
-	a1, _ := ptypes.MarshalAny(&api.OriginAttribute{
+	a1, _ := anypb.New(&api.OriginAttribute{
 		Origin: 0,
 	})
 
@@ -156,7 +155,7 @@ func (b *bgpServer) getPath(ip net.IP) *api.Path {
 			nh = "fd00::1"
 		}
 
-		v6Attrs, _ := ptypes.MarshalAny(&api.MpReachNLRIAttribute{
+		v6Attrs, _ := anypb.New(&api.MpReachNLRIAttribute{
 			Family:   v6Family,
 			NextHops: []string{nh},
 			Nlris:    []*any.Any{nlri},
@@ -168,7 +167,6 @@ func (b *bgpServer) getPath(ip net.IP) *api.Path {
 			Pattrs: []*any.Any{a1, v6Attrs},
 		}
 	} else {
-
 		if b.c.NextHop != "" {
 			nh = b.c.NextHop
 		} else if b.c.SourceIP != "" {
@@ -177,7 +175,7 @@ func (b *bgpServer) getPath(ip net.IP) *api.Path {
 			nh = b.c.RouterID
 		}
 
-		a2, _ := ptypes.MarshalAny(&api.NextHopAttribute{
+		a2, _ := anypb.New(&api.NextHopAttribute{
 			NextHop: nh,
 		})
 
