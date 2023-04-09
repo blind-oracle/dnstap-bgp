@@ -64,8 +64,7 @@ func (d *domainTree) has(s string) (ok bool) {
 func (d *domainTree) loadFile(path string) (i, s int, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		err = fmt.Errorf("Unable to open file: %s", err)
-		return
+		return 0, 0, fmt.Errorf("unable to open file: %w", err)
 	}
 
 	domains := []string{}
@@ -81,8 +80,7 @@ func (d *domainTree) loadFile(path string) (i, s int, err error) {
 	}
 
 	if err = sc.Err(); err != nil {
-		err = fmt.Errorf("Unable to read file: %s", err)
-		return
+		return 0, 0, fmt.Errorf("unable to read file: %w", err)
 	}
 
 	i, ss, err := d.loadList(domains)
@@ -105,8 +103,7 @@ func (d *domainTree) loadList(domains []string) (i, s int, err error) {
 	}
 
 	if t.Len() == 0 {
-		err = fmt.Errorf("No domains loaded (%d skipped)", s)
-		return
+		return 0, 0, fmt.Errorf("no domains loaded (%d skipped)", s)
 	}
 
 	d.Lock()

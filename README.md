@@ -1,6 +1,5 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/blind-oracle/dnstap-bgp)](https://goreportcard.com/report/github.com/blind-oracle/dnstap-bgp)
 [![Coverage Status](https://coveralls.io/repos/github/blind-oracle/dnstap-bgp/badge.svg?branch=master)](https://coveralls.io/github/blind-oracle/dnstap-bgp?branch=master)
-[![Build Status](https://travis-ci.org/blind-oracle/dnstap-bgp.svg?branch=master)](https://travis-ci.org/blind-oracle/dnstap-bgp)
 
 # dnstap-bgp
 
@@ -16,13 +15,13 @@ This daemon was created to solve the problem of manipulating traffic based on do
 ## Features
 * Load a list of domains to intercept: the prefix tree is used to match subdomains
 * Hot-reload of the domain list by a HUP signal
-* Full support for IPv6 (I hope): in DNS (AAAA RRs), in BGP and in syncer
+* Support for IPv6 - in DNS (AAAA RRs), in BGP and in syncer
 * Support for CNAMEs - they are resolved and stored as separate ip -> domain entries
 * Export routes to any number of BGP peers
 * Configurable timeout to purge entries from the cache
 * Persist the cache on disk (in a Bolt database)
 * Sync the obtained IPs with other instances of **dnstap-bgp**
-* Can switch itself to a pre-created network namespace before initializing network. This can be useful if you want to peer with a BGP server running on the same host (e.g. **bird** does not support peering with any of the local interfaces). This requires running as *root*.
+* Can be switched to a dedicated namespace using `ip netns` - see `deploy/*` init scripts for systemd. Useful when running with BGP router on the same host - ususally it can't peer with its own IPs (at least `bird`)
 
 ## Synchronization
 **dnstap-bgp** can optionally push the obtained IPs to other **dnstap-bgp** instances. It also periodically syncs its cache with peers to keep it up-to-date in case of network outages. The interaction is done using simple HTTP queries and JSON.
@@ -39,7 +38,7 @@ This daemon was created to solve the problem of manipulating traffic based on do
 Get *deb* or *rpm* packages from the releases page.
 
 ### From source
-You'll need Go environment set up and *dep* installed, then just run `make`
+You'll need Go environment set up, then just run `make`
 
 ### Building packages
 To build a package you'll need *fpm* tool installed, then just run `make rpm` or `make deb`

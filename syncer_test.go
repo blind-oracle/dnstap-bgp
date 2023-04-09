@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"math/rand"
 	"net"
 	"testing"
 	"time"
@@ -37,9 +39,10 @@ func Test_syncer(t *testing.T) {
 		}
 	}
 
+	port := rand.Intn(60000) + 2000
 	s, err := newSyncer(&syncerCfg{
-		Listen: "0.0.0.0:54321",
-		Peers:  []string{"127.0.0.1:54321"},
+		Listen: fmt.Sprintf("0.0.0.0:%d", port),
+		Peers:  []string{fmt.Sprintf("127.0.0.1:%d", port)},
 	}, ga, add, cb)
 	assert.Nil(t, err)
 

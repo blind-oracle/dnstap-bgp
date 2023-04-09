@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -50,7 +49,7 @@ func newSyncer(cf *syncerCfg, getAll getAllFunc, add addFunc, syncCb syncFunc) (
 
 	if cf.SyncInterval != "" {
 		if s.syncInterval, err = time.ParseDuration(cf.SyncInterval); err != nil {
-			return nil, fmt.Errorf("Unable to parse syncInterval: %s", err)
+			return nil, fmt.Errorf("unable to parse syncInterval: %w", err)
 		}
 	}
 
@@ -70,12 +69,12 @@ func newSyncer(cf *syncerCfg, getAll getAllFunc, add addFunc, syncCb syncFunc) (
 
 	addr, err := net.ResolveTCPAddr("tcp", cf.Listen)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	l, err := net.ListenTCP("tcp", addr)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	s.s = &http.Server{}
@@ -181,8 +180,6 @@ func (s *syncer) syncAll() {
 
 		s.syncCb(p, new, nil)
 	}
-
-	return
 }
 
 func (s *syncer) fetchRemote(p string) (es []*cacheEntry, err error) {
@@ -202,7 +199,7 @@ func (s *syncer) fetchRemote(p string) (es []*cacheEntry, err error) {
 func (s *syncer) send(e *cacheEntry, p string) (err error) {
 	js, _ := json.Marshal(e)
 	b := bytes.NewReader(js)
-	resp, err := s.callPeer(p, "put", "PUT", ioutil.NopCloser(b))
+	resp, err := s.callPeer(p, "put", "PUT", io.NopCloser(b))
 	if err != nil {
 		return
 	}

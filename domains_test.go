@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -31,7 +30,7 @@ func Test_domainTree(t *testing.T) {
 	assert.False(t, dt.has("facebookk.com"))
 
 	testlist := "__test.txt"
-	err := ioutil.WriteFile(testlist, []byte("foo.bar\n123123----foo\n"), 0666)
+	err := os.WriteFile(testlist, []byte("foo.bar\n123123----foo\n"), 0666)
 	assert.Nil(t, err)
 
 	i, s, err := dt.loadFile(testlist)

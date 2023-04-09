@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"strconv"
 	"strings"
@@ -11,17 +10,16 @@ import (
 
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
-	api "github.com/osrg/gobgp/api"
-	gobgp "github.com/osrg/gobgp/pkg/server"
+	api "github.com/osrg/gobgp/v3/api"
+	gobgp "github.com/osrg/gobgp/v3/pkg/server"
 )
 
 type bgpCfg struct {
-	AS       uint32
-	RouterID string
-	NextHop  string
+	AS          uint32
+	RouterID    string
+	NextHop     string
 	NextHopIPv6 string
-	SourceIP string
-	SourceIF string
+	SourceIP    string
 
 	Peers []string
 	IPv6  bool
@@ -34,15 +32,11 @@ type bgpServer struct {
 
 func newBgp(c *bgpCfg) (b *bgpServer, err error) {
 	if c.AS == 0 {
-		return nil, fmt.Errorf("You need to provide AS")
-	}
-
-	if c.SourceIP != "" && c.SourceIF != "" {
-		return nil, fmt.Errorf("SourceIP and SourceIF are mutually exclusive")
+		return nil, fmt.Errorf("you need to provide AS")
 	}
 
 	if len(c.Peers) == 0 {
-		return nil, fmt.Errorf("You need to provide at least one peer")
+		return nil, fmt.Errorf("you need to provide at least one peer")
 	}
 
 	b = &bgpServer{
@@ -53,15 +47,11 @@ func newBgp(c *bgpCfg) (b *bgpServer, err error) {
 
 	if err = b.s.StartBgp(context.Background(), &api.StartBgpRequest{
 		Global: &api.Global{
-			As:         c.AS,
+			Asn:        c.AS,
 			RouterId:   c.RouterID,
 			ListenPort: -1,
 		},
 	}); err != nil {
-		return
-	}
-
-	if err = b.s.MonitorPeer(context.Background(), &api.MonitorPeerRequest{}, func(p *api.Peer) { log.Println(p) }); err != nil {
 		return
 	}
 
@@ -81,14 +71,14 @@ func (b *bgpServer) addPeer(addr string) (err error) {
 		addr = t[0]
 
 		if port, err = strconv.Atoi(t[1]); err != nil {
-			return fmt.Errorf("Unable to parse port '%s' as int: %s", t[1], err)
+			return fmt.Errorf("unable to parse port '%s' as int: %s", t[1], err)
 		}
 	}
 
 	p := &api.Peer{
 		Conf: &api.PeerConf{
 			NeighborAddress: addr,
-			PeerAs:          b.c.AS,
+			PeerAsn:         b.c.AS,
 		},
 
 		AfiSafis: []*api.AfiSafi{
@@ -129,10 +119,6 @@ func (b *bgpServer) addPeer(addr string) (err error) {
 		p.Transport.LocalAddress = b.c.SourceIP
 	}
 
-	if b.c.SourceIF != "" {
-		p.Transport.BindInterface = b.c.SourceIF
-	}
-
 	return b.s.AddPeer(context.Background(), &api.AddPeerRequest{
 		Peer: p,
 	})
@@ -159,22 +145,21 @@ func (b *bgpServer) getPath(ip net.IP) *api.Path {
 	})
 
 	if ip.To4() == nil {
-
 		v6Family := &api.Family{
 			Afi:  api.Family_AFI_IP6,
 			Safi: api.Family_SAFI_UNICAST,
 		}
 
 		if b.c.NextHopIPv6 != "" {
-		  nh = b.c.NextHopIPv6
+			nh = b.c.NextHopIPv6
 		} else {
-		  nh = "fd00::1"
+			nh = "fd00::1"
 		}
 
 		v6Attrs, _ := ptypes.MarshalAny(&api.MpReachNLRIAttribute{
-			Family:		v6Family,
-			NextHops:	[]string{nh},
-			Nlris:		[]*any.Any{nlri},
+			Family:   v6Family,
+			NextHops: []string{nh},
+			Nlris:    []*any.Any{nlri},
 		})
 
 		return &api.Path{
@@ -197,9 +182,9 @@ func (b *bgpServer) getPath(ip net.IP) *api.Path {
 		})
 
 		return &api.Path{
-	  	Family: &api.Family{
-	  		Afi:  api.Family_AFI_IP,
-	  		Safi: api.Family_SAFI_UNICAST,
+			Family: &api.Family{
+				Afi:  api.Family_AFI_IP,
+				Safi: api.Family_SAFI_UNICAST,
 			},
 			Nlri:   nlri,
 			Pattrs: []*any.Any{a1, a2},

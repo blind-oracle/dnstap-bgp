@@ -4,7 +4,6 @@ DESCRIPTION := DNSTap to BGP exporter
 LICENSE := MPLv2
 
 GO ?= go
-DEP ?= dep
 VERSION := $(shell cat VERSION)
 OUT := .out
 PACKAGE := github.com/blind-oracle/$(NAME)

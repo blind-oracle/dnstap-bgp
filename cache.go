@@ -57,7 +57,6 @@ func (c *cache) add(e *cacheEntry) {
 	c.Lock()
 	c.m[string(e.IP)] = e
 	c.Unlock()
-	return
 }
 
 func (c *cache) getAll() (es []*cacheEntry) {

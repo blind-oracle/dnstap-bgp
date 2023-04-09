@@ -5,13 +5,95 @@ import (
 	"os"
 	"testing"
 
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 
 	dnstap "github.com/dnstap/golang-dnstap"
 	"github.com/miekg/dns"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func Test_ParseDNSReply(t *testing.T) {
+	msg1 := &dns.Msg{
+		Answer: []dns.RR{
+			&dns.CNAME{
+				Hdr: dns.RR_Header{
+					Name: "mqtt-mini.facebook.com.",
+				},
+
+				Target: "mqtt-mini.c10r.facebook.com.",
+			},
+
+			&dns.A{
+				Hdr: dns.RR_Header{
+					Name: "mqtt-mini.c10r.facebook.com.",
+				},
+
+				A: net.ParseIP("157.240.17.34"),
+			},
+
+			&dns.AAAA{
+				Hdr: dns.RR_Header{
+					Name: "mqtt-mini.c10r.facebook.com.",
+				},
+
+				AAAA: net.ParseIP("2a03:2880:f15b:84:face:b00c:0:1ea0"),
+			},
+		},
+	}
+
+	msg2 := &dns.Msg{
+		Answer: []dns.RR{
+			&dns.A{
+				Hdr: dns.RR_Header{
+					Name: "mqtt-mini.c10r.facebook.com.",
+				},
+
+				A: net.ParseIP("157.240.17.34"),
+			},
+
+			&dns.AAAA{
+				Hdr: dns.RR_Header{
+					Name: "mqtt-mini.c10r.facebook.com.",
+				},
+
+				AAAA: net.ParseIP("2a03:2880:f15b:84:face:b00c:0:1ea0"),
+			},
+		},
+	}
+
+	r := parseDNSReply(msg1, false)
+	assert.Equal(t, []*dnsEntry{
+		{
+			fqdn: "mqtt-mini.facebook.com.",
+			ip:   net.ParseIP("157.240.17.34"),
+		},
+	}, r)
+
+	r = parseDNSReply(msg1, true)
+	assert.Equal(t, []*dnsEntry{
+		{
+			fqdn: "mqtt-mini.facebook.com.",
+			ip:   net.ParseIP("157.240.17.34"),
+		},
+		{
+			fqdn: "mqtt-mini.facebook.com.",
+			ip:   net.ParseIP("2a03:2880:f15b:84:face:b00c:0:1ea0"),
+		},
+	}, r)
+
+	r = parseDNSReply(msg2, true)
+	assert.Equal(t, []*dnsEntry{
+		{
+			fqdn: "mqtt-mini.c10r.facebook.com.",
+			ip:   net.ParseIP("157.240.17.34"),
+		},
+		{
+			fqdn: "mqtt-mini.c10r.facebook.com.",
+			ip:   net.ParseIP("2a03:2880:f15b:84:face:b00c:0:1ea0"),
+		},
+	}, r)
+}
 
 func Test_DNSTap(t *testing.T) {
 	ip, domain := net.ParseIP("1.2.3.4"), "test.foo."
